@@ -65,9 +65,16 @@ public class PasswordVaultCLI {
     }
 
     private void printHeader() {
-        println("┌────────────────────────────────────────────┐");
-        println("│         Simple Password Vault (CLI)        │");
-        println("└────────────────────────────────────────────┘");
+        String banner = """
+██████╗  █████╗ ███████╗███████╗██╗    ██╗ ██████╗ ██████╗ ██████╗     ██╗   ██╗ █████╗ ██╗   ██╗██╗  ████████╗
+██╔══██╗██╔══██╗██╔════╝██╔════╝██║    ██║██╔═══██╗██╔══██╗██╔══██╗    ██║   ██║██╔══██╗██║   ██║██║  ╚══██╔══╝
+██████╔╝███████║███████╗███████╗██║ █╗ ██║██║   ██║██████╔╝██║  ██║    ██║   ██║███████║██║   ██║██║     ██║   
+██╔═══╝ ██╔══██║╚════██║╚════██║██║███╗██║██║   ██║██╔══██╗██║  ██║    ╚██╗ ██╔╝██╔══██║██║   ██║██║     ██║   
+██║     ██║  ██║███████║███████║╚███╔███╔╝╚██████╔╝██║  ██║██████╔╝     ╚████╔╝ ██║  ██║╚██████╔╝███████╗██║   
+╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝ ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚═════╝       ╚═══╝  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝   
+                """;
+
+        System.out.println(banner);
     }
 
     private char[] promptForMasterPassword() {
@@ -233,27 +240,33 @@ public class PasswordVaultCLI {
     }
 
     private void loadVault(char[] master) throws Exception {
+
         try (DataInputStream dis = new DataInputStream(Files.newInputStream(VAULT_FILE, StandardOpenOption.READ))) {
             byte[] magicBytes = new byte[MAGIC.length()];
             dis.readFully(magicBytes);
             String fmagic = new String(magicBytes, StandardCharsets.US_ASCII);
             if (!MAGIC.equals(fmagic)) throw new IOException("Not a recognized vault file");
+
             int version = dis.readUnsignedByte();
             if (version != VERSION) throw new IOException("Unsupported vault version: " + version);
+
             int saltLen = dis.readUnsignedByte();
             if (saltLen <= 0 || saltLen > 255) throw new IOException("Invalid salt length");
             currentSalt = new byte[saltLen];
             dis.readFully(currentSalt);
+
             int ivLen = dis.readUnsignedByte();
             if (ivLen <= 0 || ivLen > 255) throw new IOException("Invalid iv length");
             currentIv = new byte[ivLen];
             dis.readFully(currentIv);
             long ctLen = dis.readLong();
+            
             if (ctLen < 1 || ctLen > Integer.MAX_VALUE) throw new IOException("Invalid ciphertext length");
             byte[] ciphertext = new byte[(int) ctLen];
             dis.readFully(ciphertext);
             unlockedKey = deriveKey(master, currentSalt);
             byte[] plain = cipher.decrypt(ciphertext, unlockedKey, currentIv);
+
             try (ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(plain))) {
                 Object obj = ois.readObject();
                 if (obj instanceof Map) {
